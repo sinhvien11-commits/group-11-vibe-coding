@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin - Cà Phê S11</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-amber-50 min-h-screen">
+  <script src="../shared/nav.js"></script>
+
+  <main class="max-w-6xl mx-auto mt-8 px-4 pb-12">
+    <h1 class="text-2xl font-bold text-amber-900 mb-6">Quản Lý Phản Hồi</h1>
+
+    <!-- Filters -->
+    <div class="bg-white rounded-xl shadow p-4 mb-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div>
+          <label for="filterLocation" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Chi nhánh</label>
+          <select id="filterLocation"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">
+            <option value="">Tất cả chi nhánh</option>
+            <option value="District 1">District 1</option>
+            <option value="District 3">District 3</option>
+            <option value="Thao Dien">Thao Dien</option>
+          </select>
+        </div>
+        <div>
+          <label for="filterRating" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Đánh giá tối thiểu</label>
+          <select id="filterRating"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">
+            <option value="1">Tất cả (≥ 1 ★)</option>
+            <option value="2">≥ 2 ★</option>
+            <option value="3">≥ 3 ★</option>
+            <option value="4">≥ 4 ★</option>
+            <option value="5">5 ★ only</option>
+          </select>
+        </div>
+        <div>
+          <label for="filterFrom" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Từ ngày</label>
+          <input type="date" id="filterFrom"
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
+        </div>
+        <div>
+          <label for="filterTo" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Đến ngày</label>
+          <input type="date" id="filterTo"
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions bar -->
+    <div class="flex justify-between items-center mb-3">
+      <span id="rowCount" class="text-sm text-gray-600 font-medium"></span>
+      <button id="exportBtn"
+              class="bg-green-600 hover:bg-green-700 active:bg-green-800 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5">
+        ⬇ Export CSV
+      </button>
+    </div>
+
+    <!-- Table container -->
+    <div id="tableContainer" class="bg-white rounded-xl shadow overflow-hidden"></div>
+  </main>
+
+  <script>
+    const STORAGE_KEY = 'feedbackEntries';
+
+    function formatDate(iso) {
+      const d = new Date(iso);
+      const dd   = String(d.getDate()).padStart(2, '0');
+      const mm   = String(d.getMonth() + 1).padStart(2, '0');
+      const yyyy = d.getFullYear();
+      const hh   = String(d.getHours()).padStart(2, '0');
+      const min  = String(d.getMinutes()).padStart(2, '0');
+      return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+    }
+
+    function stars(n) {
+      return '★'.repeat(n) + '☆'.repeat(5 - n);
+    }
+
+    function sentimentClass(rating) {
+      if (rating <= 2) return 'bg-red-100';
+      if (rating === 3) return 'bg-yellow-100';
+      return 'bg-green-100';
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.appendChild(document.createTextNode(str || ''));
+      return div.innerHTML;
+    }
+
+    function getAllEntries() {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    }
+
+    function getFilteredEntries() {
+      const location  = document.getElementById('filterLocation').value;
+      const minRating = parseInt(document.getElementById('filterRating').value) || 1;
+      const fromVal   = document.getElementById('filterFrom').value;
+      const toVal     = document.getElementById('filterTo').value;
+
+      const fromDate = fromVal ? new Date(fromVal + 'T00:00:00') : null;
+      const toDate   = toVal   ? new Date(toVal   + 'T23:59:59') : null;
+
+      const entries = getAllEntries()
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+      return entries.filter(e => {
+        if (location && e.location !== location) return false;
+        if (e.rating < minRating) return false;
+        const ts = new Date(e.timestamp);
+        if (fromDate && ts < fromDate) return false;
+        if (toDate   && ts > toDate)   return false;
+        return true;
+      });
+    }
+
+    function render() {
+      const all      = getAllEntries();
+      const filtered = getFilteredEntries();
+      const container = document.getElementById('tableContainer');
+
+      document.getElementById('rowCount').textContent =
+        `Hiển thị ${filtered.length} / ${all.length} phản hồi`;
+
+      if (all.length === 0) {
+        container.innerHTML = `
+          <p class="text-center text-gray-500 py-16 text-base">
+            Chưa có phản hồi nào.
+          </p>`;
+        return;
+      }
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <p class="text-center text-gray-500 py-16 text-base">
+            Không có phản hồi nào khớp với bộ lọc.
+          </p>`;
+        return;
+      }
+
+      const rows = filtered.map(e => `
+        <tr class="${sentimentClass(e.rating)} border-b border-gray-200 last:border-0">
+          <td class="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">${formatDate(e.timestamp)}</td>
+          <td class="px-4 py-3 text-sm text-gray-700">${escapeHtml(e.location)}</td>
+          <td class="px-4 py-3 text-sm text-amber-600 whitespace-nowrap font-medium">
+            ${stars(e.rating)} <span class="text-gray-500 font-normal">(${e.rating})</span>
+          </td>
+          <td class="px-4 py-3 text-sm text-gray-700">${escapeHtml(e.name)}</td>
+          <td class="px-4 py-3 text-sm text-gray-700 max-w-xs">${escapeHtml(e.comment)}</td>
+        </tr>
+      `).join('');
+
+      container.innerHTML = `
+        <div class="overflow-x-auto">
+          <table class="w-full text-left min-w-[700px]">
+            <thead class="bg-amber-800 text-white">
+              <tr>
+                <th class="px-4 py-3 text-sm font-semibold">Ngày</th>
+                <th class="px-4 py-3 text-sm font-semibold">Chi nhánh</th>
+                <th class="px-4 py-3 text-sm font-semibold">Đánh giá</th>
+                <th class="px-4 py-3 text-sm font-semibold">Tên</th>
+                <th class="px-4 py-3 text-sm font-semibold">Nhận xét</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function exportCSV() {
+      const filtered = getFilteredEntries();
+      if (filtered.length === 0) {
+        alert('Không có dữ liệu để xuất.');
+        return;
+      }
+
+      const today = new Date().toISOString().slice(0, 10);
+      const header = 'Date,Location,Rating,Name,Comment\n';
+      const body = filtered.map(e => {
+        const date    = formatDate(e.timestamp);
+        const name    = '"' + (e.name    || '').replace(/"/g, '""') + '"';
+        const comment = '"' + (e.comment || '').replace(/"/g, '""') + '"';
+        return `${date},${e.location},${e.rating},${name},${comment}`;
+      }).join('\n');
+
+      // UTF-8 BOM ensures Vietnamese characters render correctly in Excel
+      const BOM  = '﻿';
+      const blob = new Blob([BOM + header + body], { type: 'text/csv;charset=utf-8;' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `feedback-export-${today}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    // Wire up filters — re-render immediately on any change
+    ['filterLocation', 'filterRating', 'filterFrom', 'filterTo'].forEach(id => {
+      document.getElementById(id).addEventListener('change', render);
+    });
+
+    document.getElementById('exportBtn').addEventListener('click', exportCSV);
+
+    render();
+  </script>
+</body>
+</html>

@@ -62,6 +62,10 @@
     <div id="tableContainer" class="bg-white rounded-xl shadow overflow-hidden"></div>
   </main>
 
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../shared/firebase.js"></script>
+
   <script>
     const STORAGE_KEY = 'feedbackEntries';
 
@@ -91,11 +95,18 @@
       return div.innerHTML;
     }
 
-    function getAllEntries() {
+    async function getAllEntries() {
+      if (window.firebaseDB) {
+        try {
+          return await window.firebaseDB.loadEntries();
+        } catch (e) {
+          console.warn('Firestore unavailable, falling back to localStorage:', e);
+        }
+      }
       return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
     }
 
-    function getFilteredEntries() {
+    function applyFilters(entries) {
       const location  = document.getElementById('filterLocation').value;
       const minRating = parseInt(document.getElementById('filterRating').value) || 1;
       const fromVal   = document.getElementById('filterFrom').value;
@@ -104,22 +115,22 @@
       const fromDate = fromVal ? new Date(fromVal + 'T00:00:00') : null;
       const toDate   = toVal   ? new Date(toVal   + 'T23:59:59') : null;
 
-      const entries = getAllEntries()
-        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-      return entries.filter(e => {
-        if (location && e.location !== location) return false;
-        if (e.rating < minRating) return false;
-        const ts = new Date(e.timestamp);
-        if (fromDate && ts < fromDate) return false;
-        if (toDate   && ts > toDate)   return false;
-        return true;
-      });
+      return entries
+        .slice()
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+        .filter(e => {
+          if (location && e.location !== location) return false;
+          if (e.rating < minRating) return false;
+          const ts = new Date(e.timestamp);
+          if (fromDate && ts < fromDate) return false;
+          if (toDate   && ts > toDate)   return false;
+          return true;
+        });
     }
 
-    function render() {
-      const all      = getAllEntries();
-      const filtered = getFilteredEntries();
+    async function render() {
+      const all      = await getAllEntries();
+      const filtered = applyFilters(all);
       const container = document.getElementById('tableContainer');
 
       document.getElementById('rowCount').textContent =
@@ -171,8 +182,9 @@
       `;
     }
 
-    function exportCSV() {
-      const filtered = getFilteredEntries();
+    async function exportCSV() {
+      const all      = await getAllEntries();
+      const filtered = applyFilters(all);
       if (filtered.length === 0) {
         alert('Không có dữ liệu để xuất.');
         return;

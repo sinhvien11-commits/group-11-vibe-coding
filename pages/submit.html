@@ -73,6 +73,10 @@
     </div>
   </main>
 
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="../shared/firebase.js"></script>
+
   <script>
     const STORAGE_KEY = 'feedbackEntries';
     const ratingInput = document.getElementById('rating');
@@ -132,6 +136,12 @@
       const entries = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
       entries.push(entry);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+
+      if (window.firebaseDB) {
+        window.firebaseDB.saveEntry(entry).catch(err =>
+          console.warn('Firestore write failed:', err)
+        );
+      }
 
       // Reset
       this.reset();

@@ -1,18 +1,18 @@
 // ── Firebase Configuration ──────────────────────────────────────────────────
 // Replace every value below with your project's config from:
 // Firebase Console → Project Settings → Your apps → Firebase SDK snippet (Config)
-const _firebaseConfig = {
-  apiKey:            "PASTE_YOUR_API_KEY",
-  authDomain:        "PASTE_YOUR_AUTH_DOMAIN",
-  projectId:         "PASTE_YOUR_PROJECT_ID",
-  storageBucket:     "PASTE_YOUR_STORAGE_BUCKET",
-  messagingSenderId: "PASTE_YOUR_MESSAGING_SENDER_ID",
-  appId:             "PASTE_YOUR_APP_ID"
+const firebaseConfig = {
+  apiKey: "AIzaSyAqPI_ZMFK2jHE56EVFIr_FUULIhBr24xU",
+  authDomain: "customer-feedback-dashbo-c043f.firebaseapp.com",
+  projectId: "customer-feedback-dashbo-c043f",
+  storageBucket: "customer-feedback-dashbo-c043f.firebasestorage.app",
+  messagingSenderId: "337501707549",
+  appId: "1:337501707549:web:9eb104f041d2978b6015f4"
 };
 // ────────────────────────────────────────────────────────────────────────────
 
 try {
-  firebase.initializeApp(_firebaseConfig);
+  firebase.initializeApp(firebaseConfig);
   const _db = firebase.firestore();
 
   window.firebaseDB = {

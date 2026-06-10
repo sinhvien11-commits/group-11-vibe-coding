@@ -5,15 +5,80 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin - Cà Phê S11</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .bar-fill { transition: width 0.6s cubic-bezier(0.4,0,0.2,1); }
+    .sentiment-bar { transition: width 0.6s cubic-bezier(0.4,0,0.2,1); }
+  </style>
 </head>
 <body class="bg-amber-50 min-h-screen">
   <script src="../shared/nav.js"></script>
 
   <main class="max-w-6xl mx-auto mt-8 px-4 pb-12">
-    <h1 class="text-2xl font-bold text-amber-900 mb-6">Quản Lý Phản Hồi</h1>
+    <div class="flex items-center justify-between mb-6">
+      <h1 class="text-2xl font-bold text-amber-900">Quản Lý Phản Hồi</h1>
+      <span class="text-xs text-gray-400 font-medium">Dữ liệu thực từ Firestore</span>
+    </div>
 
-    <!-- Filters -->
-    <div class="bg-white rounded-xl shadow p-4 mb-4">
+    <!-- ── KPI Cards ──────────────────────────────────────────────────── -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+
+      <div class="bg-white rounded-xl shadow-sm border border-amber-100 p-5 flex items-center gap-4">
+        <div class="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center text-2xl flex-shrink-0">📋</div>
+        <div>
+          <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Tổng phản hồi</p>
+          <p id="kpiTotal" class="text-3xl font-extrabold text-amber-800 leading-none">—</p>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm border border-amber-100 p-5 flex items-center gap-4">
+        <div class="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center text-2xl flex-shrink-0">⭐</div>
+        <div>
+          <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Đánh giá trung bình</p>
+          <p id="kpiAvg" class="text-3xl font-extrabold text-amber-800 leading-none">—</p>
+          <p id="kpiAvgStars" class="text-sm text-amber-400 mt-0.5"></p>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm border border-amber-100 p-5 flex items-center gap-4">
+        <div class="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center text-2xl flex-shrink-0">📍</div>
+        <div>
+          <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Chi nhánh có phản hồi</p>
+          <p id="kpiBranches" class="text-3xl font-extrabold text-amber-800 leading-none">—</p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── Charts ─────────────────────────────────────────────────────── -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+
+      <!-- Rating distribution -->
+      <div class="bg-white rounded-xl shadow-sm border border-amber-100 p-6">
+        <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-5">Phân bố đánh giá</h2>
+        <div id="ratingChart" class="space-y-3"></div>
+      </div>
+
+      <!-- Branch distribution -->
+      <div class="bg-white rounded-xl shadow-sm border border-amber-100 p-6">
+        <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-5">Phản hồi theo chi nhánh</h2>
+        <div id="branchChart" class="space-y-3"></div>
+      </div>
+
+    </div>
+
+    <!-- ── Sentiment Summary ───────────────────────────────────────────── -->
+    <div class="bg-white rounded-xl shadow-sm border border-amber-100 p-6 mb-6">
+      <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-5">Tóm tắt cảm xúc khách hàng</h2>
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5" id="sentimentCards"></div>
+
+      <!-- Stacked proportion bar -->
+      <div class="h-4 rounded-full overflow-hidden flex" id="sentimentBar"></div>
+      <div class="flex gap-4 mt-2 text-xs text-gray-500" id="sentimentLegend"></div>
+    </div>
+
+    <!-- ── Filters ─────────────────────────────────────────────────────── -->
+    <div class="bg-white rounded-xl shadow-sm border border-amber-100 p-4 mb-4">
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div>
           <label for="filterLocation" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Chi nhánh</label>
@@ -49,7 +114,7 @@
       </div>
     </div>
 
-    <!-- Actions bar -->
+    <!-- ── Actions bar ─────────────────────────────────────────────────── -->
     <div class="flex justify-between items-center mb-3">
       <span id="rowCount" class="text-sm text-gray-600 font-medium"></span>
       <button id="exportBtn"
@@ -58,8 +123,8 @@
       </button>
     </div>
 
-    <!-- Table container -->
-    <div id="tableContainer" class="bg-white rounded-xl shadow overflow-hidden"></div>
+    <!-- ── Table ───────────────────────────────────────────────────────── -->
+    <div id="tableContainer" class="bg-white rounded-xl shadow-sm border border-amber-100 overflow-hidden"></div>
   </main>
 
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -69,14 +134,14 @@
   <script>
     const STORAGE_KEY = 'feedbackEntries';
 
+    /* ── Helpers ──────────────────────────────────────────────────────── */
     function formatDate(iso) {
-      const d = new Date(iso);
-      const dd   = String(d.getDate()).padStart(2, '0');
-      const mm   = String(d.getMonth() + 1).padStart(2, '0');
-      const yyyy = d.getFullYear();
-      const hh   = String(d.getHours()).padStart(2, '0');
-      const min  = String(d.getMinutes()).padStart(2, '0');
-      return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+      const d   = new Date(iso);
+      const dd  = String(d.getDate()).padStart(2, '0');
+      const mm  = String(d.getMonth() + 1).padStart(2, '0');
+      const hh  = String(d.getHours()).padStart(2, '0');
+      const min = String(d.getMinutes()).padStart(2, '0');
+      return `${dd}/${mm}/${d.getFullYear()} ${hh}:${min}`;
     }
 
     function stars(n) {
@@ -84,9 +149,9 @@
     }
 
     function sentimentClass(rating) {
-      if (rating <= 2) return 'bg-red-100';
-      if (rating === 3) return 'bg-yellow-100';
-      return 'bg-green-100';
+      if (rating <= 2) return 'bg-red-50';
+      if (rating === 3) return 'bg-yellow-50';
+      return 'bg-green-50';
     }
 
     function escapeHtml(str) {
@@ -95,11 +160,10 @@
       return div.innerHTML;
     }
 
+    /* ── Data ─────────────────────────────────────────────────────────── */
     async function getAllEntries() {
       if (window.firebaseDB) {
-        try {
-          return await window.firebaseDB.loadEntries();
-        } catch (e) {
+        try { return await window.firebaseDB.loadEntries(); } catch (e) {
           console.warn('Firestore unavailable, falling back to localStorage:', e);
         }
       }
@@ -111,9 +175,8 @@
       const minRating = parseInt(document.getElementById('filterRating').value) || 1;
       const fromVal   = document.getElementById('filterFrom').value;
       const toVal     = document.getElementById('filterTo').value;
-
-      const fromDate = fromVal ? new Date(fromVal + 'T00:00:00') : null;
-      const toDate   = toVal   ? new Date(toVal   + 'T23:59:59') : null;
+      const fromDate  = fromVal ? new Date(fromVal + 'T00:00:00') : null;
+      const toDate    = toVal   ? new Date(toVal   + 'T23:59:59') : null;
 
       return entries
         .slice()
@@ -128,9 +191,121 @@
         });
     }
 
-    async function render() {
-      const all      = await getAllEntries();
-      const filtered = applyFilters(all);
+    /* ── Analytics ────────────────────────────────────────────────────── */
+    function renderAnalytics(all) {
+      const total = all.length;
+
+      /* KPI: total */
+      document.getElementById('kpiTotal').textContent = total;
+
+      /* KPI: average rating */
+      if (total === 0) {
+        document.getElementById('kpiAvg').textContent    = '—';
+        document.getElementById('kpiAvgStars').textContent = '';
+      } else {
+        const avg = all.reduce((s, e) => s + e.rating, 0) / total;
+        document.getElementById('kpiAvg').textContent      = avg.toFixed(1);
+        const rounded = Math.round(avg);
+        document.getElementById('kpiAvgStars').textContent = '★'.repeat(rounded) + '☆'.repeat(5 - rounded);
+      }
+
+      /* KPI: branch count */
+      const branchSet = new Set(all.map(e => e.location).filter(Boolean));
+      document.getElementById('kpiBranches').textContent = branchSet.size;
+
+      /* Rating distribution chart */
+      const ratingCounts = [5, 4, 3, 2, 1].map(r => ({
+        star: r,
+        count: all.filter(e => e.rating === r).length
+      }));
+      const maxRating = Math.max(...ratingCounts.map(r => r.count), 1);
+      const ratingColors = { 5: 'bg-green-500', 4: 'bg-lime-400', 3: 'bg-yellow-400', 2: 'bg-orange-400', 1: 'bg-red-500' };
+
+      document.getElementById('ratingChart').innerHTML = ratingCounts.map(({ star, count }) => {
+        const pct = ((count / maxRating) * 100).toFixed(1);
+        const share = total > 0 ? ((count / total) * 100).toFixed(0) : 0;
+        return `
+          <div class="flex items-center gap-3">
+            <span class="w-6 text-xs font-bold text-gray-600 text-right flex-shrink-0">${star}★</span>
+            <div class="flex-1 bg-gray-100 rounded-full h-5 overflow-hidden">
+              <div class="bar-fill ${ratingColors[star]} h-full rounded-full" style="width:${pct}%"></div>
+            </div>
+            <span class="w-14 text-xs text-gray-500 flex-shrink-0">${count} <span class="text-gray-400">(${share}%)</span></span>
+          </div>`;
+      }).join('');
+
+      /* Branch distribution chart */
+      const branchMap = {};
+      all.forEach(e => { if (e.location) branchMap[e.location] = (branchMap[e.location] || 0) + 1; });
+      const branchData = Object.entries(branchMap).sort((a, b) => b[1] - a[1]);
+      const maxBranch  = Math.max(...branchData.map(b => b[1]), 1);
+      const branchPalette = ['bg-amber-500','bg-amber-400','bg-amber-300','bg-amber-200','bg-amber-100'];
+
+      document.getElementById('branchChart').innerHTML = branchData.length === 0
+        ? '<p class="text-sm text-gray-400 text-center py-6">Chưa có dữ liệu</p>'
+        : branchData.map(([loc, count], i) => {
+            const pct   = ((count / maxBranch) * 100).toFixed(1);
+            const share = total > 0 ? ((count / total) * 100).toFixed(0) : 0;
+            return `
+              <div class="flex items-center gap-3">
+                <span class="w-24 text-xs font-medium text-gray-600 truncate flex-shrink-0" title="${escapeHtml(loc)}">${escapeHtml(loc)}</span>
+                <div class="flex-1 bg-gray-100 rounded-full h-5 overflow-hidden">
+                  <div class="bar-fill ${branchPalette[i % branchPalette.length]} h-full rounded-full" style="width:${pct}%"></div>
+                </div>
+                <span class="w-14 text-xs text-gray-500 flex-shrink-0">${count} <span class="text-gray-400">(${share}%)</span></span>
+              </div>`;
+          }).join('');
+
+      /* Sentiment summary */
+      const neg  = all.filter(e => e.rating <= 2).length;
+      const neu  = all.filter(e => e.rating === 3).length;
+      const pos  = all.filter(e => e.rating >= 4).length;
+      const pct  = v => total > 0 ? ((v / total) * 100).toFixed(0) : 0;
+
+      document.getElementById('sentimentCards').innerHTML = `
+        <div class="rounded-xl bg-red-50 border border-red-200 p-4 flex items-center gap-3">
+          <span class="text-2xl">😞</span>
+          <div>
+            <p class="text-xs font-semibold text-red-500 uppercase tracking-wide">Tiêu cực (1–2 ★)</p>
+            <p class="text-2xl font-extrabold text-red-700">${neg}</p>
+            <p class="text-xs text-red-400">${pct(neg)}% tổng phản hồi</p>
+          </div>
+        </div>
+        <div class="rounded-xl bg-yellow-50 border border-yellow-200 p-4 flex items-center gap-3">
+          <span class="text-2xl">😐</span>
+          <div>
+            <p class="text-xs font-semibold text-yellow-600 uppercase tracking-wide">Trung lập (3 ★)</p>
+            <p class="text-2xl font-extrabold text-yellow-700">${neu}</p>
+            <p class="text-xs text-yellow-500">${pct(neu)}% tổng phản hồi</p>
+          </div>
+        </div>
+        <div class="rounded-xl bg-green-50 border border-green-200 p-4 flex items-center gap-3">
+          <span class="text-2xl">😊</span>
+          <div>
+            <p class="text-xs font-semibold text-green-600 uppercase tracking-wide">Tích cực (4–5 ★)</p>
+            <p class="text-2xl font-extrabold text-green-700">${pos}</p>
+            <p class="text-xs text-green-500">${pct(pos)}% tổng phản hồi</p>
+          </div>
+        </div>`;
+
+      /* Stacked proportion bar */
+      const negW = total > 0 ? (neg / total * 100).toFixed(1) : 0;
+      const neuW = total > 0 ? (neu / total * 100).toFixed(1) : 0;
+      const posW = total > 0 ? (pos / total * 100).toFixed(1) : 0;
+      document.getElementById('sentimentBar').innerHTML = `
+        <div class="sentiment-bar bg-red-400 h-full"    style="width:${negW}%"></div>
+        <div class="sentiment-bar bg-yellow-400 h-full" style="width:${neuW}%"></div>
+        <div class="sentiment-bar bg-green-400 h-full"  style="width:${posW}%"></div>
+        ${total === 0 ? '<div class="bg-gray-200 h-full flex-1"></div>' : ''}`;
+
+      document.getElementById('sentimentLegend').innerHTML = `
+        <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-red-400 inline-block"></span>Tiêu cực ${negW}%</span>
+        <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-yellow-400 inline-block"></span>Trung lập ${neuW}%</span>
+        <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-green-400 inline-block"></span>Tích cực ${posW}%</span>`;
+    }
+
+    /* ── Table ────────────────────────────────────────────────────────── */
+    function renderTable(all, filtered) {
       const container = document.getElementById('tableContainer');
 
       document.getElementById('rowCount').textContent =
@@ -138,85 +313,79 @@
 
       if (all.length === 0) {
         container.innerHTML = `
-          <p class="text-center text-gray-500 py-16 text-base">
-            Chưa có phản hồi nào.
-          </p>`;
+          <p class="text-center text-gray-400 py-16 text-base">Chưa có phản hồi nào.</p>`;
         return;
       }
 
       if (filtered.length === 0) {
         container.innerHTML = `
-          <p class="text-center text-gray-500 py-16 text-base">
-            Không có phản hồi nào khớp với bộ lọc.
-          </p>`;
+          <p class="text-center text-gray-400 py-16 text-base">Không có phản hồi nào khớp với bộ lọc.</p>`;
         return;
       }
 
       const rows = filtered.map(e => `
-        <tr class="${sentimentClass(e.rating)} border-b border-gray-200 last:border-0">
-          <td class="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">${formatDate(e.timestamp)}</td>
-          <td class="px-4 py-3 text-sm text-gray-700">${escapeHtml(e.location)}</td>
-          <td class="px-4 py-3 text-sm text-amber-600 whitespace-nowrap font-medium">
-            ${stars(e.rating)} <span class="text-gray-500 font-normal">(${e.rating})</span>
+        <tr class="${sentimentClass(e.rating)} border-b border-gray-100 last:border-0 hover:brightness-95 transition-all">
+          <td class="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">${formatDate(e.timestamp)}</td>
+          <td class="px-4 py-3 text-sm text-gray-700 font-medium">${escapeHtml(e.location)}</td>
+          <td class="px-4 py-3 text-sm text-amber-500 whitespace-nowrap font-semibold">
+            ${stars(e.rating)} <span class="text-gray-400 font-normal text-xs">(${e.rating})</span>
           </td>
           <td class="px-4 py-3 text-sm text-gray-700">${escapeHtml(e.name)}</td>
-          <td class="px-4 py-3 text-sm text-gray-700 max-w-xs">${escapeHtml(e.comment)}</td>
-        </tr>
-      `).join('');
+          <td class="px-4 py-3 text-sm text-gray-600 max-w-xs">${escapeHtml(e.comment)}</td>
+        </tr>`).join('');
 
       container.innerHTML = `
         <div class="overflow-x-auto">
           <table class="w-full text-left min-w-[700px]">
             <thead class="bg-amber-800 text-white">
               <tr>
-                <th class="px-4 py-3 text-sm font-semibold">Ngày</th>
-                <th class="px-4 py-3 text-sm font-semibold">Chi nhánh</th>
-                <th class="px-4 py-3 text-sm font-semibold">Đánh giá</th>
-                <th class="px-4 py-3 text-sm font-semibold">Tên</th>
-                <th class="px-4 py-3 text-sm font-semibold">Nhận xét</th>
+                <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wide">Ngày</th>
+                <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wide">Chi nhánh</th>
+                <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wide">Đánh giá</th>
+                <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wide">Tên</th>
+                <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wide">Nhận xét</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
           </table>
-        </div>
-      `;
+        </div>`;
     }
 
+    /* ── Main render ──────────────────────────────────────────────────── */
+    async function render() {
+      const all      = await getAllEntries();
+      const filtered = applyFilters(all);
+      renderAnalytics(all);
+      renderTable(all, filtered);
+    }
+
+    /* ── CSV Export ───────────────────────────────────────────────────── */
     async function exportCSV() {
       const all      = await getAllEntries();
       const filtered = applyFilters(all);
-      if (filtered.length === 0) {
-        alert('Không có dữ liệu để xuất.');
-        return;
-      }
+      if (filtered.length === 0) { alert('Không có dữ liệu để xuất.'); return; }
 
-      const today = new Date().toISOString().slice(0, 10);
+      const today  = new Date().toISOString().slice(0, 10);
       const header = 'Date,Location,Rating,Name,Comment\n';
-      const body = filtered.map(e => {
-        const date    = formatDate(e.timestamp);
+      const body   = filtered.map(e => {
         const name    = '"' + (e.name    || '').replace(/"/g, '""') + '"';
         const comment = '"' + (e.comment || '').replace(/"/g, '""') + '"';
-        return `${date},${e.location},${e.rating},${name},${comment}`;
+        return `${formatDate(e.timestamp)},${e.location},${e.rating},${name},${comment}`;
       }).join('\n');
 
-      // UTF-8 BOM ensures Vietnamese characters render correctly in Excel
       const BOM  = '﻿';
       const blob = new Blob([BOM + header + body], { type: 'text/csv;charset=utf-8;' });
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
-      a.href     = url;
-      a.download = `feedback-export-${today}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      a.href = url; a.download = `feedback-export-${today}.csv`;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a); URL.revokeObjectURL(url);
     }
 
-    // Wire up filters — re-render immediately on any change
+    /* ── Wire-up ──────────────────────────────────────────────────────── */
     ['filterLocation', 'filterRating', 'filterFrom', 'filterTo'].forEach(id => {
       document.getElementById(id).addEventListener('change', render);
     });
-
     document.getElementById('exportBtn').addEventListener('click', exportCSV);
 
     render();
